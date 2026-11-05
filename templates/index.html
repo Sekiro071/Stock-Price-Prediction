@@ -1,0 +1,1328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StockSight — NSE Predictor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg:       #0b0e14;
+      --surface:  #111520;
+      --surface2: #161c2d;
+      --border:   #1f2a42;
+      --accent:   #3b82f6;
+      --accent2:  #60a5fa;
+      --green:    #22c55e;
+      --red:      #ef4444;
+      --gold:     #f59e0b;
+      --text:     #e2e8f0;
+      --muted:    #64748b;
+      --label:    #94a3b8;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── Navbar ── */
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 200;
+      background: rgba(11,14,20,0.92);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 32px;
+      transition: opacity 0.3s;
+    }
+
+    /* Hide nav search bar when in hero/landing state */
+    body.hero-state .nav-search { opacity: 0; pointer-events: none; }
+
+    .logo {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 20px;
+      letter-spacing: -0.5px;
+      color: var(--text);
+    }
+    .logo span { color: var(--accent); }
+
+    .nav-tagline {
+      font-size: 12px;
+      color: var(--muted);
+      border-left: 1px solid var(--border);
+      padding-left: 12px;
+      margin-left: 4px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .nav-search {
+      margin-left: auto;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      transition: opacity 0.3s;
+    }
+
+    /* ── Shared search wrapper styles ── */
+    .search-wrap {
+      position: relative;
+    }
+    .search-wrap svg.search-icon {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--muted);
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    /* ── Nav input ── */
+    #symbolInputNav {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      font-size: 14px;
+      padding: 9px 14px 9px 38px;
+      border-radius: 8px;
+      width: 220px;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      text-transform: uppercase;
+    }
+    #symbolInputNav::placeholder { color: var(--muted); text-transform: none; }
+    #symbolInputNav:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
+    }
+
+    /* ── Hero input ── */
+    #symbolInputHero {
+      background: rgba(22, 28, 45, 0.8);
+      border: 1.5px solid var(--border);
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      font-size: 18px;
+      padding: 16px 20px 16px 52px;
+      border-radius: 12px;
+      width: 460px;
+      max-width: 90vw;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      text-transform: uppercase;
+    }
+    #symbolInputHero::placeholder { color: var(--muted); text-transform: none; font-size: 16px; }
+    #symbolInputHero:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 4px rgba(59,130,246,0.2);
+    }
+
+    /* ── Predict buttons ── */
+    .predict-btn {
+      background: var(--accent);
+      color: #fff;
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 13px;
+      letter-spacing: 0.04em;
+      padding: 9px 20px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+      white-space: nowrap;
+    }
+    .predict-btn:hover  { background: #2563eb; }
+    .predict-btn:active { transform: scale(0.97); }
+    .predict-btn:disabled { background: var(--border); color: var(--muted); cursor: not-allowed; transform: none; }
+
+    #predictBtnHero {
+      padding: 16px 32px;
+      font-size: 15px;
+      border-radius: 12px;
+    }
+
+    /* ── Autocomplete dropdown ── */
+    .autocomplete-list {
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 0;
+      right: 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      z-index: 1000;
+      max-height: 260px;
+      overflow-y: auto;
+      box-shadow: 0 16px 48px rgba(0,0,0,0.5);
+      display: none;
+    }
+    .autocomplete-list.open { display: block; }
+    .autocomplete-list::-webkit-scrollbar { width: 4px; }
+    .autocomplete-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .ac-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      cursor: pointer;
+      transition: background 0.12s;
+      border-bottom: 1px solid rgba(31,42,66,0.5);
+    }
+    .ac-item:last-child { border-bottom: none; }
+    .ac-item:hover, .ac-item.highlighted { background: var(--surface2); }
+    .ac-symbol {
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--accent2);
+      min-width: 90px;
+    }
+    .ac-name {
+      font-size: 13px;
+      color: var(--label);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .ac-sector {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      color: var(--muted);
+      margin-left: auto;
+      white-space: nowrap;
+    }
+
+    /* ── Main layout ── */
+    main {
+      position: relative;
+      z-index: 1;
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 28px 24px 60px;
+    }
+
+    /* ── Landing hero ── */
+    #landing {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 76vh;
+      text-align: center;
+      gap: 24px;
+    }
+    .hero-badge {
+      background: rgba(59,130,246,0.12);
+      border: 1px solid rgba(59,130,246,0.3);
+      color: var(--accent2);
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 5px 14px;
+      border-radius: 20px;
+    }
+    .hero-title {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: clamp(36px, 6vw, 64px);
+      line-height: 1.05;
+      letter-spacing: -1.5px;
+      background: linear-gradient(135deg, #e2e8f0 30%, var(--accent2) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero-sub {
+      color: var(--muted);
+      font-size: 16px;
+      max-width: 480px;
+      line-height: 1.6;
+    }
+
+    /* Hero search row */
+    .hero-search-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .hero-chips {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .hero-chip {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--label);
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      padding: 4px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .hero-chip:hover { border-color: var(--accent); color: var(--accent2); }
+
+    /* ── Loader ── */
+    #loader {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 60vh;
+      gap: 24px;
+    }
+    .spinner {
+      width: 48px; height: 48px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loader-text {
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      color: var(--muted);
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+    @keyframes pulse { 0%,100% { opacity: 0.4; } 50% { opacity: 1; } }
+
+    /* ── Error ── */
+    #errorBox {
+      display: none;
+      background: rgba(239,68,68,0.08);
+      border: 1px solid rgba(239,68,68,0.3);
+      color: #fca5a5;
+      padding: 16px 20px;
+      border-radius: 10px;
+      font-size: 14px;
+      margin: 24px 0;
+    }
+
+    /* ── Dashboard ── */
+    #dashboard { display: none; }
+
+    /* ── PREDICTION HERO BANNER ── */
+    #predHero {
+      display: none;
+      position: relative;
+      border-radius: 16px;
+      margin-bottom: 28px;
+      padding: 32px 40px;
+      overflow: hidden;
+      animation: predReveal 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+    @keyframes predReveal {
+      from { opacity: 0; transform: translateY(-20px) scale(0.97); }
+      to   { opacity: 1; transform: none; }
+    }
+
+    #predHero.up-hero {
+      background: linear-gradient(135deg, rgba(34,197,94,0.08) 0%, rgba(34,197,94,0.03) 60%, transparent 100%);
+      border: 1px solid rgba(34,197,94,0.3);
+    }
+    #predHero.down-hero {
+      background: linear-gradient(135deg, rgba(239,68,68,0.08) 0%, rgba(239,68,68,0.03) 60%, transparent 100%);
+      border: 1px solid rgba(239,68,68,0.3);
+    }
+
+    /* Glow orb behind direction */
+    #predHero::before {
+      content: '';
+      position: absolute;
+      top: -60px; right: -60px;
+      width: 300px; height: 300px;
+      border-radius: 50%;
+      pointer-events: none;
+      opacity: 0.15;
+      transition: background 0.3s;
+    }
+    #predHero.up-hero::before   { background: radial-gradient(circle, #22c55e, transparent 70%); }
+    #predHero.down-hero::before { background: radial-gradient(circle, #ef4444, transparent 70%); }
+
+    .pred-hero-inner {
+      display: flex;
+      align-items: center;
+      gap: 40px;
+      flex-wrap: wrap;
+      position: relative;
+      z-index: 1;
+    }
+
+    .pred-direction-main {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 6px;
+    }
+    .direction-label {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .direction-big {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: clamp(52px, 8vw, 88px);
+      line-height: 1;
+      letter-spacing: -2px;
+      animation: countUp 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both 0.1s;
+    }
+    @keyframes countUp {
+      from { opacity: 0; transform: scale(0.6) translateY(10px); }
+      to   { opacity: 1; transform: none; }
+    }
+    .direction-big.up   { color: var(--green); text-shadow: 0 0 60px rgba(34,197,94,0.4); }
+    .direction-big.down { color: var(--red);   text-shadow: 0 0 60px rgba(239,68,68,0.4); }
+
+    .pred-pct-big {
+      font-family: 'DM Mono', monospace;
+      font-weight: 500;
+      font-size: 22px;
+      margin-top: 4px;
+    }
+    .pred-pct-big.up   { color: var(--green); }
+    .pred-pct-big.down { color: var(--red);   }
+
+    .pred-hero-stats {
+      display: flex;
+      gap: 32px;
+      flex-wrap: wrap;
+    }
+
+    .pred-hero-stat {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .pred-hero-stat label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+    }
+    .pred-hero-stat span {
+      font-family: 'DM Mono', monospace;
+      font-size: 22px;
+      font-weight: 500;
+      color: var(--text);
+    }
+
+    .pred-hero-divider {
+      width: 1px;
+      height: 60px;
+      background: var(--border);
+      align-self: center;
+    }
+
+    .pred-model-tag {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 4px;
+      border: 1px solid rgba(59,130,246,0.3);
+      background: rgba(59,130,246,0.08);
+      color: var(--accent2);
+      letter-spacing: 0.06em;
+      margin-top: 8px;
+      display: inline-block;
+    }
+
+    /* ── Stock header ── */
+    .stock-header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      gap: 16px;
+      margin-bottom: 24px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .stock-identity h1 {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 28px;
+      letter-spacing: -0.5px;
+      line-height: 1;
+    }
+    .stock-meta {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-top: 8px;
+      flex-wrap: wrap;
+    }
+    .badge {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      font-weight: 500;
+      padding: 3px 9px;
+      border-radius: 4px;
+      letter-spacing: 0.04em;
+    }
+    .badge-nse    { background: rgba(59,130,246,0.18); color: var(--accent2); border: 1px solid rgba(59,130,246,0.3); }
+    .badge-sector { background: var(--surface2); color: var(--label); border: 1px solid var(--border); }
+
+    .stock-price { margin-left: auto; text-align: right; }
+    .price-big {
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 36px;
+      letter-spacing: -0.5px;
+    }
+    .price-change {
+      font-family: 'DM Mono', monospace;
+      font-size: 14px;
+      margin-top: 4px;
+    }
+    .up   { color: var(--green); }
+    .down { color: var(--red); }
+
+    /* ── Grid layout ── */
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: 340px 1fr;
+      grid-template-rows: auto auto;
+      gap: 16px;
+    }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+    }
+    .card-title {
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 16px;
+    }
+
+    /* Price summary */
+    .price-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .price-item label {
+      display: block;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    .price-item span {
+      font-family: 'DM Mono', monospace;
+      font-size: 16px;
+      font-weight: 500;
+      color: var(--text);
+    }
+
+    /* Compact prediction card (under the hero) */
+    .pred-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .pred-stat {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+    }
+    .pred-stat label {
+      display: block;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .pred-stat span {
+      font-family: 'DM Mono', monospace;
+      font-size: 18px;
+      font-weight: 500;
+    }
+
+    .model-compare { display: flex; gap: 8px; margin-top: 12px; }
+    .model-pill {
+      flex: 1;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+    }
+    .model-pill.best-model { border-color: var(--accent); background: rgba(59,130,246,0.06); }
+    .model-pill > label {
+      display: block;
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-bottom: 8px;
+      text-align: center;
+    }
+    .model-pill.best-model > label { color: var(--accent2); }
+    .model-pill .metric-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px 10px;
+    }
+    .model-pill .metric-item { text-align: center; }
+    .model-pill .metric-item .m-label {
+      display: block;
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin-bottom: 2px;
+    }
+    .model-pill .metric-item .m-val {
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      color: var(--text);
+    }
+    .crown { font-size: 12px; margin-left: 4px; }
+
+    /* Company essentials */
+    .essentials-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0;
+    }
+    .essential-item {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      border-right: 1px solid var(--border);
+    }
+    .essential-item:nth-child(3n)     { border-right: none; }
+    .essential-item:nth-last-child(-n+3) { border-bottom: none; }
+    .essential-item label {
+      display: block;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .essential-item span {
+      font-family: 'DM Mono', monospace;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text);
+    }
+
+    /* ── Chart area ── */
+    .chart-card { grid-column: 1 / -1; padding: 20px 24px 16px; }
+    .chart-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+    .chart-tabs {
+      display: flex;
+      gap: 2px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 3px;
+    }
+    .chart-tab {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.06em;
+      padding: 5px 14px;
+      border-radius: 6px;
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .chart-tab.active { background: var(--border); color: var(--text); }
+    .chart-legend { display: flex; gap: 16px; align-items: center; }
+    .legend-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 5px;
+    }
+    .legend-label { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--label); }
+    .chart-container { position: relative; height: 320px; }
+
+    /* ── Animations ── */
+    .fade-in { animation: fadeIn 0.4s ease both; }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:none; } }
+
+    /* ── Responsive ── */
+    @media (max-width: 860px) {
+      .dashboard-grid { grid-template-columns: 1fr; }
+      nav { padding: 12px 16px; }
+      #symbolInputNav { width: 140px; }
+      .pred-hero-inner { gap: 20px; }
+      #predHero { padding: 24px 20px; }
+    }
+  </style>
+</head>
+<body class="hero-state">
+
+<!-- ── Navbar ── -->
+<nav>
+  <div class="logo">Stock<span>Sight</span></div>
+  <div class="nav-tagline">NSE ML Predictor</div>
+  <div class="nav-search" id="navSearch">
+    <div class="search-wrap">
+      <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+      <input id="symbolInputNav" type="text" placeholder="SBIN, TCS, RELIANCE…" autocomplete="off" />
+      <div class="autocomplete-list" id="acListNav"></div>
+    </div>
+    <button class="predict-btn" id="predictBtnNav">Predict →</button>
+  </div>
+</nav>
+
+<main>
+
+  <!-- ── Landing ── -->
+  <div id="landing" class="fade-in">
+    <div class="hero-badge">LSTM · GRU · NSE Stocks</div>
+    <h1 class="hero-title">Predict Tomorrow's<br/>Indian Market Moves</h1>
+    <p class="hero-sub">Enter any NSE ticker to get ML-powered open &amp; close price forecasts backed by LSTM and GRU models trained on historical data.</p>
+
+    <!-- Hero search -->
+    <div class="hero-search-row">
+      <div class="search-wrap">
+        <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        <input id="symbolInputHero" type="text" placeholder="Enter NSE ticker e.g. RELIANCE" autocomplete="off" />
+        <div class="autocomplete-list" id="acListHero"></div>
+      </div>
+      <button class="predict-btn" id="predictBtnHero">Predict →</button>
+    </div>
+
+    <div class="hero-chips">
+      <div class="hero-chip" onclick="quickSearch('SBIN')">SBIN</div>
+      <div class="hero-chip" onclick="quickSearch('TCS')">TCS</div>
+      <div class="hero-chip" onclick="quickSearch('RELIANCE')">RELIANCE</div>
+      <div class="hero-chip" onclick="quickSearch('INFY')">INFY</div>
+      <div class="hero-chip" onclick="quickSearch('HDFCBANK')">HDFCBANK</div>
+      <div class="hero-chip" onclick="quickSearch('TITAN')">TITAN</div>
+      <div class="hero-chip" onclick="quickSearch('BAJFINANCE')">BAJFINANCE</div>
+      <div class="hero-chip" onclick="quickSearch('LAURUSLABS')">LAURUSLABS</div>
+    </div>
+  </div>
+
+  <!-- ── Loader ── -->
+  <div id="loader">
+    <div class="spinner"></div>
+    <div class="loader-text" id="loaderText">Training models, please wait…</div>
+  </div>
+
+  <!-- ── Error ── -->
+  <div id="errorBox"></div>
+
+  <!-- ── Dashboard ── -->
+  <div id="dashboard" class="fade-in">
+
+    <!-- ▲▼ PREDICTION HERO BANNER -->
+    <div id="predHero">
+      <div class="pred-hero-inner">
+        <div class="pred-direction-main">
+          <div class="direction-label">Next-Day Forecast</div>
+          <div class="direction-big" id="directionBig">—</div>
+          <div class="pred-pct-big" id="predPctBig">—</div>
+          <div class="pred-model-tag" id="predModelTag">—</div>
+          <div id="clampNotice" style="display:none;margin-top:8px;font-size:11px;color:var(--gold);opacity:0.85;"></div>
+        </div>
+        <div class="pred-hero-divider"></div>
+        <div class="pred-hero-stats">
+          <div class="pred-hero-stat">
+            <label>Predicted Open</label>
+            <span id="predHeroOpen">—</span>
+          </div>
+          <div class="pred-hero-stat">
+            <label>Predicted Close</label>
+            <span id="predHeroClose">—</span>
+          </div>
+          <div class="pred-hero-stat">
+            <label>Last Close</label>
+            <span id="predHeroLast">—</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stock header -->
+    <div class="stock-header">
+      <div class="stock-identity">
+        <h1 id="hName">—</h1>
+        <div class="stock-meta">
+          <span class="badge badge-nse" id="hSymbol">—</span>
+          <span class="badge badge-sector" id="hSector">—</span>
+        </div>
+      </div>
+      <div class="stock-price">
+        <div class="price-big" id="hPrice">—</div>
+        <div class="price-change" id="hChange">—</div>
+      </div>
+    </div>
+
+    <!-- Grid -->
+    <div class="dashboard-grid">
+
+      <!-- Price Summary -->
+      <div class="card fade-in" style="animation-delay:.05s">
+        <div class="card-title">Price Summary</div>
+        <div class="price-grid">
+          <div class="price-item"><label>Today's High</label><span id="pDayHigh">—</span></div>
+          <div class="price-item"><label>Today's Low</label><span id="pDayLow">—</span></div>
+          <div class="price-item"><label>52W High</label><span id="p52High">—</span></div>
+          <div class="price-item"><label>52W Low</label><span id="p52Low">—</span></div>
+        </div>
+      </div>
+
+      <!-- Company Essentials -->
+      <div class="card fade-in" style="animation-delay:.08s">
+        <div class="card-title">Company Essentials</div>
+        <div class="essentials-grid">
+          <div class="essential-item"><label>Market Cap</label><span id="eMkcap">—</span></div>
+          <div class="essential-item"><label>P/E Ratio</label><span id="ePe">—</span></div>
+          <div class="essential-item"><label>P/B Ratio</label><span id="ePb">—</span></div>
+          <div class="essential-item"><label>EPS (TTM)</label><span id="eEps">—</span></div>
+          <div class="essential-item"><label>Div. Yield</label><span id="eDiv">—</span></div>
+          <div class="essential-item"><label>Book Value</label><span id="eBv">—</span></div>
+          <div class="essential-item"><label>Promoter Hold.</label><span id="ePromo">—</span></div>
+          <div class="essential-item"><label>ROE</label><span id="eRoe">—</span></div>
+          <div class="essential-item"><label>ROA</label><span id="eRoce">—</span></div>
+        </div>
+      </div>
+
+      <!-- Model Comparison — RMSE & MAE separately for Open and Close (₹) -->
+      <div class="card fade-in" style="animation-delay:.12s">
+        <div class="card-title">Model Comparison — Test Set (₹)</div>
+        <div class="model-compare">
+
+          <div class="model-pill" id="lstmPill">
+            <label>LSTM</label>
+            <div class="metric-grid">
+              <div class="metric-item">
+                <span class="m-label">RMSE Open</span>
+                <span class="m-val" id="lstmRmseOpen">—</span>
+              </div>
+              <div class="metric-item">
+                <span class="m-label">RMSE Close</span>
+                <span class="m-val" id="lstmRmseClose">—</span>
+              </div>
+              <div class="metric-item">
+                <span class="m-label">MAE Open</span>
+                <span class="m-val" id="lstmMaeOpen">—</span>
+              </div>
+              <div class="metric-item">
+                <span class="m-label">MAE Close</span>
+                <span class="m-val" id="lstmMaeClose">—</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="model-pill" id="gruPill">
+            <label>GRU</label>
+            <div class="metric-grid">
+              <div class="metric-item">
+                <span class="m-label">RMSE Open</span>
+                <span class="m-val" id="gruRmseOpen">—</span>
+              </div>
+              <div class="metric-item">
+                <span class="m-label">RMSE Close</span>
+                <span class="m-val" id="gruRmseClose">—</span>
+              </div>
+              <div class="metric-item">
+                <span class="m-label">MAE Open</span>
+                <span class="m-val" id="gruMaeOpen">—</span>
+              </div>
+              <div class="metric-item">
+                <span class="m-label">MAE Close</span>
+                <span class="m-val" id="gruMaeClose">—</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Chart -->
+      <div class="card chart-card fade-in" style="animation-delay:.15s">
+        <div class="chart-header">
+          <div class="card-title" style="margin-bottom:0">Price Chart</div>
+          <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap">
+            <div class="chart-tabs">
+              <button class="chart-tab active" onclick="switchTab(this,'historical')">Historical</button>
+              <button class="chart-tab" onclick="switchTab(this,'prediction')">Prediction Fit</button>
+            </div>
+            <div class="chart-legend" id="chartLegend">
+              <div><span class="legend-dot" style="background:#3b82f6"></span><span class="legend-label">Close Price</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="chart-container">
+          <canvas id="mainChart"></canvas>
+        </div>
+      </div>
+
+    </div><!-- /dashboard-grid -->
+  </div><!-- /dashboard -->
+
+</main>
+
+<script>
+  /* ─── NSE company list — fetched from /api/companies on load ─────────── */
+  let NSE_COMPANIES = [];   // populated by loadCompanies() on DOMContentLoaded
+
+  async function loadCompanies() {
+    try {
+      const res = await fetch('/api/companies');
+      NSE_COMPANIES = await res.json();
+    } catch (e) {
+      console.warn('Could not load company list:', e);
+    }
+  }
+
+  /* ─────────────── Autocomplete logic ─────────────────────────────────────── */
+  function filterCompanies(query) {
+    const q = query.toUpperCase().trim();
+    if (!q) return [];
+    return NSE_COMPANIES.filter(([sym, name]) =>
+      sym.startsWith(q) || name.toUpperCase().includes(q)
+    ).slice(0, 8);
+  }
+
+  let acHighlightIdx = { hero: -1, nav: -1 };
+
+  function renderAcList(listEl, results, inputEl) {
+    listEl.innerHTML = '';
+    if (!results.length) { listEl.classList.remove('open'); return; }
+    results.forEach(([sym, name, sector], i) => {
+      const item = document.createElement('div');
+      item.className = 'ac-item';
+      item.innerHTML = `<span class="ac-symbol">${sym}</span><span class="ac-name">${name}</span><span class="ac-sector">${sector}</span>`;
+      item.addEventListener('mousedown', e => {
+        e.preventDefault();
+        inputEl.value = sym;
+        listEl.classList.remove('open');
+        runPredict(sym);
+      });
+      listEl.appendChild(item);
+    });
+    listEl.classList.add('open');
+  }
+
+  function setupAutocomplete(inputEl, listEl, whichKey) {
+    inputEl.addEventListener('input', () => {
+      acHighlightIdx[whichKey] = -1;
+      renderAcList(listEl, filterCompanies(inputEl.value), inputEl);
+    });
+
+    inputEl.addEventListener('keydown', e => {
+      const items = listEl.querySelectorAll('.ac-item');
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        acHighlightIdx[whichKey] = Math.min(acHighlightIdx[whichKey] + 1, items.length - 1);
+        items.forEach((it, i) => it.classList.toggle('highlighted', i === acHighlightIdx[whichKey]));
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        acHighlightIdx[whichKey] = Math.max(acHighlightIdx[whichKey] - 1, -1);
+        items.forEach((it, i) => it.classList.toggle('highlighted', i === acHighlightIdx[whichKey]));
+      } else if (e.key === 'Enter') {
+        if (acHighlightIdx[whichKey] >= 0 && items[acHighlightIdx[whichKey]]) {
+          const sym = items[acHighlightIdx[whichKey]].querySelector('.ac-symbol').textContent;
+          inputEl.value = sym;
+          listEl.classList.remove('open');
+          runPredict(sym);
+        } else {
+          listEl.classList.remove('open');
+          runPredict(inputEl.value);
+        }
+      } else if (e.key === 'Escape') {
+        listEl.classList.remove('open');
+      }
+    });
+
+    inputEl.addEventListener('blur', () => {
+      setTimeout(() => listEl.classList.remove('open'), 150);
+    });
+  }
+
+  setupAutocomplete(
+    document.getElementById('symbolInputHero'),
+    document.getElementById('acListHero'),
+    'hero'
+  );
+  setupAutocomplete(
+    document.getElementById('symbolInputNav'),
+    document.getElementById('acListNav'),
+    'nav'
+  );
+
+  /* ─────────────── State ─────────────────────────────────────────────────── */
+  let chartInstance = null;
+  let chartData     = null;
+  let activeTab     = 'historical';
+
+  const loaderMessages = [
+    'Downloading market data…',
+    'Scaling features…',
+    'Training LSTM model…',
+    'Training GRU model…',
+    'Evaluating models…',
+    'Generating next-day forecast…',
+  ];
+  let loaderMsgIdx   = 0;
+  let loaderInterval = null;
+
+  function startLoaderCycle() {
+    loaderMsgIdx = 0;
+    document.getElementById('loaderText').textContent = loaderMessages[0];
+    loaderInterval = setInterval(() => {
+      loaderMsgIdx = (loaderMsgIdx + 1) % loaderMessages.length;
+      document.getElementById('loaderText').textContent = loaderMessages[loaderMsgIdx];
+    }, 4500);
+  }
+  function stopLoaderCycle() {
+    if (loaderInterval) { clearInterval(loaderInterval); loaderInterval = null; }
+  }
+
+  /* ─────────────── Quick-search chips ──────────────────────────────────── */
+  function quickSearch(sym) {
+    document.getElementById('symbolInputHero').value = sym;
+    runPredict(sym);
+  }
+
+  /* ─────────────── Main predict ─────────────────────────────────────────── */
+  async function runPredict(forceSym) {
+    // Resolve symbol — prefer forceSym, then active input
+    let raw = forceSym;
+    if (!raw) {
+      const hero = document.getElementById('symbolInputHero');
+      const nav  = document.getElementById('symbolInputNav');
+      // Use whichever input is visible / has content
+      raw = document.body.classList.contains('hero-state')
+        ? hero.value.trim()
+        : nav.value.trim();
+    }
+    if (!raw) return;
+
+    // Sync both inputs
+    document.getElementById('symbolInputHero').value = raw.toUpperCase();
+    document.getElementById('symbolInputNav').value  = raw.toUpperCase();
+
+    // Transition: hero → nav search bar
+    document.body.classList.remove('hero-state');
+
+    // UI state
+    document.getElementById('landing').style.display    = 'none';
+    document.getElementById('dashboard').style.display  = 'none';
+    document.getElementById('predHero').style.display   = 'none';
+    document.getElementById('errorBox').style.display   = 'none';
+    document.getElementById('loader').style.display     = 'flex';
+    document.getElementById('predictBtnNav').disabled   = true;
+    document.getElementById('predictBtnHero').disabled  = true;
+    startLoaderCycle();
+
+    try {
+      const res  = await fetch('/predict', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbol: raw })
+      });
+      const data = await res.json();
+
+      stopLoaderCycle();
+      document.getElementById('loader').style.display    = 'none';
+      document.getElementById('predictBtnNav').disabled  = false;
+      document.getElementById('predictBtnHero').disabled = false;
+
+      if (!res.ok || data.error) {
+        showError(data.error || 'Unknown error.');
+        return;
+      }
+
+      populateDashboard(data);
+
+    } catch (err) {
+      stopLoaderCycle();
+      document.getElementById('loader').style.display    = 'none';
+      document.getElementById('predictBtnNav').disabled  = false;
+      document.getElementById('predictBtnHero').disabled = false;
+      showError('Network error: ' + err.message);
+    }
+  }
+
+  function showError(msg) {
+    const el = document.getElementById('errorBox');
+    el.textContent = '⚠ ' + msg;
+    el.style.display = 'block';
+    document.getElementById('landing').style.display = 'flex';
+    document.body.classList.add('hero-state');
+  }
+
+  /* ─────────────── Populate dashboard ─────────────────────────────────── */
+  function fmt(v, prefix='₹') {
+    if (v === null || v === undefined || v === 'N/A') return 'N/A';
+    return prefix + Number(v).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+  }
+
+  function populateDashboard(d) {
+    // ── Prediction Hero Banner ──
+    const isUp     = d.direction === 'UP';
+    const heroBanner = document.getElementById('predHero');
+    heroBanner.className = isUp ? 'up-hero' : 'down-hero';
+
+    const dirBig = document.getElementById('directionBig');
+    dirBig.textContent  = isUp ? '▲ UP' : '▼ DOWN';
+    dirBig.className    = 'direction-big ' + (isUp ? 'up' : 'down');
+
+    const pctBig = document.getElementById('predPctBig');
+    pctBig.textContent = `${isUp ? '+' : ''}${d.change_pct}% vs last close`;
+    pctBig.className   = 'pred-pct-big ' + (isUp ? 'up' : 'down');
+
+    document.getElementById('predModelTag').textContent = `Best model: ${d.best_model}`;
+    document.getElementById('predHeroOpen').textContent  = fmt(d.next_open);
+    document.getElementById('predHeroClose').textContent = fmt(d.next_close);
+    document.getElementById('predHeroLast').textContent  = fmt(d.current_close);
+
+    heroBanner.style.display = 'block';
+
+    // ── Stock header ──
+    document.getElementById('hName').textContent   = d.name;
+    document.getElementById('hSymbol').textContent = d.symbol.replace('.NS','') + ' • NSE';
+    document.getElementById('hSector').textContent = d.sector;
+    document.getElementById('hPrice').textContent  = fmt(d.current_close);
+
+    const chEl = document.getElementById('hChange');
+    chEl.textContent = `${d.day_change} (${d.day_change_pct})`;
+    chEl.className   = 'price-change ' + (d.day_change && d.day_change.startsWith('+') ? 'up' : 'down');
+
+    // ── Price summary ──
+    setText('pDayHigh', fmt(d.day_high));
+    setText('pDayLow',  fmt(d.day_low));
+    setText('p52High',  fmt(d.week52_high));
+    setText('p52Low',   fmt(d.week52_low));
+
+    // ── Essentials ──
+    setText('eMkcap',  d.mkcap);
+    setText('ePe',     d.pe === 'N/A' ? 'N/A' : d.pe + 'x');
+    setText('ePb',     d.pb === 'N/A' ? 'N/A' : d.pb + 'x');
+    setText('eEps',    d.eps === 'N/A' ? 'N/A' : '₹' + d.eps);
+    setText('eDiv',    d.div_yield);
+    setText('eBv',     d.book_value === 'N/A' ? 'N/A' : '₹' + d.book_value);
+    setText('ePromo',  d.promo_hold);
+    setText('eRoe',    d.roe);
+    setText('eRoce',   d.roce);
+
+    // ── Model pills — RMSE & MAE for Open / Close (₹) ──
+    const lstmBest = d.best_model === 'LSTM';
+
+    // Update pill border / label styling
+    document.getElementById('lstmPill').className = 'model-pill' + (lstmBest  ? ' best-model' : '');
+    document.getElementById('gruPill').className  = 'model-pill' + (!lstmBest ? ' best-model' : '');
+    document.getElementById('lstmPill').querySelector('label').innerHTML =
+      'LSTM' + (lstmBest  ? ' <span class="crown">👑</span>' : '');
+    document.getElementById('gruPill').querySelector('label').innerHTML  =
+      'GRU'  + (!lstmBest ? ' <span class="crown">👑</span>' : '');
+
+    // Populate individual metric cells
+    const fmtRs = v => v === 'N/A' ? 'N/A' : '₹' + Number(v).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+    setText('lstmRmseOpen',  fmtRs(d.lstm_rmse_open));
+    setText('lstmRmseClose', fmtRs(d.lstm_rmse_close));
+    setText('lstmMaeOpen',   fmtRs(d.lstm_mae_open));
+    setText('lstmMaeClose',  fmtRs(d.lstm_mae_close));
+    setText('gruRmseOpen',   fmtRs(d.gru_rmse_open));
+    setText('gruRmseClose',  fmtRs(d.gru_rmse_close));
+    setText('gruMaeOpen',    fmtRs(d.gru_mae_open));
+    setText('gruMaeClose',   fmtRs(d.gru_mae_close));
+
+    // ── Circuit-breaker notice ──
+    const clampNotice = document.getElementById('clampNotice');
+    if (d.clamped) {
+      clampNotice.style.display = 'block';
+      clampNotice.textContent   = '⚡ Prediction was capped at the NSE ±20% daily circuit-breaker limit.';
+    } else {
+      clampNotice.style.display = 'none';
+    }
+
+    // ── Chart ──
+    chartData = d;
+    activeTab = 'historical';
+    document.querySelectorAll('.chart-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.chart-tab')[0].classList.add('active');
+    renderChart('historical');
+
+    document.getElementById('dashboard').style.display = 'block';
+    document.getElementById('dashboard').classList.add('fade-in');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function setText(id, val) {
+    document.getElementById(id).textContent = (val === null || val === undefined) ? 'N/A' : val;
+  }
+
+  /* ─────────────── Chart ─────────────────────────────────────────────────── */
+  function switchTab(btn, tab) {
+    document.querySelectorAll('.chart-tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    activeTab = tab;
+    renderChart(tab);
+  }
+
+  function renderChart(tab) {
+    if (!chartData) return;
+    if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+
+    const ctx      = document.getElementById('mainChart').getContext('2d');
+    const legendEl = document.getElementById('chartLegend');
+    let datasets, labels;
+
+    if (tab === 'historical') {
+      labels   = chartData.hist_dates;
+      datasets = [{
+        label: 'Close Price',
+        data:  chartData.hist_close,
+        borderColor: '#3b82f6',
+        backgroundColor: createGradient(ctx, '#3b82f6'),
+        borderWidth: 1.5,
+        pointRadius: 0,
+        fill: true,
+        tension: 0.3,
+      }];
+      legendEl.innerHTML = `<div><span class="legend-dot" style="background:#3b82f6"></span><span class="legend-label">Close Price</span></div>`;
+    } else {
+      labels   = chartData.test_dates;
+      datasets = [
+        {
+          label: 'Actual Close',
+          data:  chartData.actual_close,
+          borderColor: '#94a3b8',
+          backgroundColor: 'transparent',
+          borderWidth: 1.5,
+          pointRadius: 0,
+          tension: 0.3,
+        },
+        {
+          label: `${chartData.best_model} Predicted`,
+          data:  chartData.pred_close,
+          borderColor: '#f59e0b',
+          backgroundColor: createGradient(ctx, '#f59e0b'),
+          borderWidth: 1.5,
+          borderDash: [4, 3],
+          pointRadius: 0,
+          fill: false,
+          tension: 0.3,
+        }
+      ];
+      legendEl.innerHTML = `
+        <div><span class="legend-dot" style="background:#94a3b8"></span><span class="legend-label">Actual</span></div>
+        <div><span class="legend-dot" style="background:#f59e0b"></span><span class="legend-label">${chartData.best_model} Predicted</span></div>`;
+    }
+
+    chartInstance = new Chart(ctx, {
+      type: 'line',
+      data: { labels, datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: '#111520',
+            borderColor: '#1f2a42',
+            borderWidth: 1,
+            titleColor: '#94a3b8',
+            bodyColor: '#e2e8f0',
+            titleFont: { family: 'DM Mono', size: 11 },
+            bodyFont:  { family: 'DM Mono', size: 13 },
+            callbacks: {
+              label: ctx => ` ₹${Number(ctx.parsed.y).toLocaleString('en-IN', {maximumFractionDigits:2})}`
+            }
+          }
+        },
+        scales: {
+          x: {
+            ticks: {
+              color: '#475569',
+              font: { family: 'DM Mono', size: 10 },
+              maxTicksLimit: 10,
+              maxRotation: 0,
+            },
+            grid: { color: 'rgba(255,255,255,0.03)' },
+          },
+          y: {
+            ticks: {
+              color: '#475569',
+              font: { family: 'DM Mono', size: 10 },
+              callback: v => '₹' + Number(v).toLocaleString('en-IN', {maximumFractionDigits:0})
+            },
+            grid: { color: 'rgba(255,255,255,0.04)' },
+          }
+        }
+      }
+    });
+  }
+
+  function createGradient(ctx, color) {
+    const grad = ctx.createLinearGradient(0, 0, 0, 320);
+    grad.addColorStop(0, color + '28');
+    grad.addColorStop(1, color + '00');
+    return grad;
+  }
+
+  /* ─────────────── Button listeners ─────────────────────────────────────── */
+  document.getElementById('predictBtnHero').addEventListener('click', () => runPredict());
+  document.getElementById('predictBtnNav').addEventListener('click',  () => runPredict());
+
+  /* ─────────────── Bootstrap ──────────────────────────────────────────────── */
+  document.addEventListener('DOMContentLoaded', () => {
+    loadCompanies();   // pre-fetch NSE company list for autocomplete
+  });
+</script>
+</body>
+</html>

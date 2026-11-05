@@ -1,7 +1,6 @@
-Flask
-yfinance
-numpy
-pandas
-matplotlib
-scikit-learn
-tensorflow
+Flask>=3.0
+yfinance>=0.2
+numpy>=1.26
+pandas>=2.2
+scikit-learn>=1.4
+tensorflow>=2.16
